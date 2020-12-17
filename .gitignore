@@ -1,0 +1,10 @@
+.DS_Store
+extern/
+crashes/
+libs/
+obj/
+Android.mk.backup
+qpm.shared.json
+*.zip
+cmake-build-debug
+.idea

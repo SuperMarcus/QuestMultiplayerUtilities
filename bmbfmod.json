@@ -1,0 +1,45 @@
+{
+  "id": "multiplayer",
+  "name": "Multiplayer Utilities",
+  "version": "1.0.0",
+  "author": "marcuszhou",
+  "description": [
+    "A set of tools for Quest Multiplayer experience."
+  ],
+  "coverImageFilename": "cover.gif",
+  "category": "Gameplay",
+  "gameVersion": "1.13.0",
+  "links": {
+    "project-home": "https://github.com/SuperMarcus/QuestMultiplayerUtilities"
+  },
+  "platform": "Quest",
+  "components": [
+    {
+      "Type": "HookMod",
+      "InstallAction": {
+        "InstallLibraryFile": "libmultiplayer.so"
+      },
+      "UninstallAction": {
+        "RemoveLibraryFile": "libmultiplayer.so"
+      }
+    },
+    {
+      "type": "HookModLibrary",
+      "installAction": {
+        "installLibraryFile": "libbeatsaber-hook_0_8_4.so"
+      }
+    },
+    {
+      "type": "HookModLibrary",
+      "installAction": {
+        "installLibraryFile": "libcustom-types.so"
+      }
+    },
+    {
+      "type": "HookModLibrary",
+      "installAction": {
+        "installLibraryFile": "libcodegen_0_4_0.so"
+      }
+    }
+  ]
+}
