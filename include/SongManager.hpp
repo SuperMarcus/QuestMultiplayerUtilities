@@ -1,6 +1,8 @@
 #pragma once
 
 #include <map>
+#include <unordered_set>
+
 #include "utils/typedefs.h"
 
 #include "GlobalNamespace/BeatmapLevelsModel.hpp"
@@ -19,17 +21,24 @@
 namespace QuestMultiplayer {
     class SongManager {
     public:
+        /// Song download completion handler type. std::nullopt if download fails, otherwise the path to the downloaded beatmap.
+        using DownloadCompletionHandler = std::function<void(std::optional<std::string>)>;
+
         SongManager();
 
         GlobalNamespace::BeatmapLevelsModel* getLevelsModel();
         GlobalNamespace::AlwaysOwnedContentContainerSO* getContentContainer();
-        GlobalNamespace::IPreviewBeatmapLevel* getLevelPackByID(Il2CppString* id);
+        GlobalNamespace::IPreviewBeatmapLevel* getLevelPreviewByID(Il2CppString* id);
         GlobalNamespace::IPreviewBeatmapLevel* getLevelPackByID(const std::string& id);
-        GlobalNamespace::CustomPreviewBeatmapLevel* loadLevelFromPath(std::string path);
+
         void updateSongs();
 
-        static void downloadLevelByHash(const std::string& hash, std::function<void()> completionHandler);
-        static void downloadLevelArchive(std::string archiveUrl, const std::string& levelHash, std::function<void()> completionHandler);
+        static GlobalNamespace::CustomPreviewBeatmapLevel* loadLevelFromPath(std::string path);
+        static bool downloadLevelByHash(const std::string& hash, DownloadCompletionHandler completionHandler);
+        static bool downloadLevelByID(const std::string& beatmapId, DownloadCompletionHandler completionHandler);
+        static bool downloadLevelArchive(std::string archiveUrl, const std::string& levelHash, DownloadCompletionHandler completionHandler);
+        static bool levelIsDownloaded(const std::string& hash);
+        static std::string customLevelPath(const std::string& hash);
 
         static SongManager& sharedInstance();
         static std::string getLevelHashFromID(const std::string& id);
@@ -37,13 +46,17 @@ namespace QuestMultiplayer {
         static std::string getLevelDownloadsDirectory();
 
     private:
+        using InternalResponseHandler = std::function<void(UnityEngine::Networking::UnityWebRequest*)>;
+
         GlobalNamespace::BeatmapLevelsModel* _levelsModel {};
         GlobalNamespace::AlwaysOwnedContentContainerSO* _contentContainer {};
         System::Threading::CancellationTokenSource* _songReloadTokenSource {};
 
-        static std::map<UnityEngine::Networking::UnityWebRequestAsyncOperation*, std::function<void(UnityEngine::Networking::UnityWebRequest*)>> handlerPool;
-        static void performWebRequest(std::string url, std::function<void(UnityEngine::Networking::UnityWebRequest*)> completionHandler);
+        static std::map<std::string, GlobalNamespace::CustomPreviewBeatmapLevel*> cachedPreviewLevels;
+        static std::unordered_set<std::string> downloadingLevels;
+        static std::map<UnityEngine::Networking::UnityWebRequestAsyncOperation*, InternalResponseHandler> handlerPool;
+
+        static void performWebRequest(std::string url, InternalResponseHandler completionHandler);
         static void webRequestCompletionForwarder(UnityEngine::Networking::UnityWebRequestAsyncOperation* op);
-//        static GlobalNamespace::IBeatmapLevelPackCollection* onCustomSongReloadCompletion(System::Threading::Tasks::Task_1<GlobalNamespace::IBeatmapLevelPackCollection*>* task);
     };
 }

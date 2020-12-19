@@ -16,6 +16,7 @@
 #include "UnityEngine/Networking/DownloadHandler.hpp"
 #include "UnityEngine/Resources.hpp"
 
+#include "GlobalNamespace/PlayerDataModel.hpp"
 #include "GlobalNamespace/IBeatmapLevelPackCollection.hpp"
 #include "GlobalNamespace/IAnnotatedBeatmapLevelCollection.hpp"
 #include "GlobalNamespace/BeatmapLevelCollection.hpp"
@@ -46,7 +47,9 @@ using namespace System;
 using namespace System::Threading;
 using namespace System::Threading::Tasks;
 
-std::map<UnityWebRequestAsyncOperation*, std::function<void(UnityWebRequest*)>> SongManager::handlerPool;
+std::map<std::string, GlobalNamespace::CustomPreviewBeatmapLevel*> SongManager::cachedPreviewLevels;
+std::unordered_set<std::string> SongManager::downloadingLevels;
+std::map<UnityWebRequestAsyncOperation*, SongManager::InternalResponseHandler> SongManager::handlerPool;
 
 SongManager::SongManager() = default;
 
@@ -65,16 +68,15 @@ SongManager& SongManager::sharedInstance() {
 
 GlobalNamespace::IPreviewBeatmapLevel *SongManager::getLevelPackByID(const std::string& id) {
     auto levelIdCsStr = il2cpp_utils::createcsstr(id);
-    return getLevelPackByID(levelIdCsStr);
+    return getLevelPreviewByID(levelIdCsStr);
 }
 
-GlobalNamespace::IPreviewBeatmapLevel *SongManager::getLevelPackByID(Il2CppString* id) {
+GlobalNamespace::IPreviewBeatmapLevel *SongManager::getLevelPreviewByID(Il2CppString* id) {
     try {
         auto model = getLevelsModel();
-
         return model->GetLevelPreviewForLevelId(id);
     } catch (...) {
-        getLogger().info("SongManager::getLevelPackByID: Level pack with ID %ls was not found.", &id->m_firstChar);
+        getLogger().info("SongManager::getLevelPreviewByID: Level pack with ID %ls was not found.", &id->m_firstChar);
         return nullptr;
     }
 }
@@ -105,7 +107,7 @@ void SongManager::webRequestCompletionForwarder(UnityWebRequestAsyncOperation* o
     }
 }
 
-void SongManager::performWebRequest(std::string url, std::function<void(UnityWebRequest*)> completionHandler) {
+void SongManager::performWebRequest(std::string url, SongManager::InternalResponseHandler completionHandler) {
     auto csUrl = il2cpp_utils::createcsstr(url);
     auto webRequest = UnityWebRequest::Get(csUrl);
 
@@ -123,9 +125,22 @@ void SongManager::performWebRequest(std::string url, std::function<void(UnityWeb
     ));
 }
 
-void SongManager::downloadLevelByHash(const std::string& hash, std::function<void()> completionHandler) {
+bool SongManager::downloadLevelByHash(const std::string& hash, DownloadCompletionHandler completionHandler) {
+    if (levelIsDownloaded(hash)) {
+        completionHandler(customLevelPath(hash));
+        return true;
+    }
+
+    if (downloadingLevels.contains(hash)) {
+        getLogger().info("Level %s is already downloading.", hash.c_str());
+        return false;
+    }
+
     auto requestUrl = "https://beatsaver.com/api/maps/by-hash/" + hash;
     performWebRequest(requestUrl, [=](UnityWebRequest* request) {
+        // Remove level from downloading songs
+        SongManager::downloadingLevels.erase(hash);
+
         auto downloadHandler = request->get_downloadHandler();
         auto responseText = to_utf8(csstrtostr(downloadHandler->GetText()));
 
@@ -139,15 +154,31 @@ void SongManager::downloadLevelByHash(const std::string& hash, std::function<voi
             SongManager::downloadLevelArchive(downloadUrl, hash, completionHandler);
         } else {
             getLogger().warning("Failed to retrieve beatmap information");
-            completionHandler();
+            completionHandler(std::nullopt);
         }
     });
+    downloadingLevels.insert(hash);
+
+    return true;
 }
 
-void SongManager::downloadLevelArchive(std::string archiveUrl, const std::string& levelHash, std::function<void()> completionHandler) {
+bool SongManager::downloadLevelArchive(std::string archiveUrl, const std::string& levelHash, DownloadCompletionHandler completionHandler) {
+    if (levelIsDownloaded(levelHash)) {
+        completionHandler(customLevelPath(levelHash));
+        return true;
+    }
+
+    if (downloadingLevels.contains(levelHash)) {
+        getLogger().info("Level %s is already downloading.", levelHash.c_str());
+        return false;
+    }
+
     auto levelId = "custom_level_" + levelHash;
     getLogger().info("Downloading level %s from \"%s\"...", levelId.data(), archiveUrl.data());
     performWebRequest(archiveUrl, [=](UnityWebRequest* request) {
+        // Remove level from downloading songs
+        SongManager::downloadingLevels.erase(levelHash);
+
         auto downloadHandler = request->get_downloadHandler();
         auto responseData = downloadHandler->GetData();
 
@@ -175,15 +206,16 @@ void SongManager::downloadLevelArchive(std::string archiveUrl, const std::string
             getLogger().info("Level %s downloaded to path %s.", levelId.data(), levelPath.data());
             std::remove(levelArchivePath.data());
 
-            // Load the downloaded song
-//            SongManager::sharedInstance().loadLevelFromPath(levelPath);
-            SongManager::sharedInstance().updateSongs();
+            // Call the completion handler with level path
+            completionHandler(levelPath);
         } else {
             getLogger().info("Failed to download level. Empty response.");
+            completionHandler(std::nullopt);
         }
-
-        completionHandler();
     });
+    downloadingLevels.insert(levelHash);
+
+    return true;
 }
 
 std::string SongManager::getRootDownloadsDirectory() {
@@ -205,9 +237,13 @@ std::string SongManager::getLevelDownloadsDirectory() {
 }
 
 GlobalNamespace::CustomPreviewBeatmapLevel *SongManager::loadLevelFromPath(std::string path) {
+    if (cachedPreviewLevels.contains(path)) {
+        getLogger().info("Level at path %s has been cached.", path.data());
+        return cachedPreviewLevels[path];
+    }
+
     getLogger().info("Loading song at path: %s...", path.data());
 
-    auto model = getLevelsModel();
     auto levelPathStr = il2cpp_utils::createcsstr(path);
     auto levelInfoData = LoadCustomLevelInfoSaveData(levelPathStr);
     auto levelId = "custom_level_" + GetCustomLevelHash(levelInfoData, path);
@@ -217,14 +253,9 @@ GlobalNamespace::CustomPreviewBeatmapLevel *SongManager::loadLevelFromPath(std::
     std::transform(levelId.begin(), levelId.end(), levelId.begin(), [](auto c) { return std::tolower(c); });
 
     getLogger().info("Loading preview for song %s at path %s...", songName.data(), path.data());
-//    model->
-    auto levelPreview = LoadCustomPreviewBeatmapLevelAsync(levelPathStr, levelInfoData);
 
-    if (levelPreview && model) {
-        getLogger().info("Registering song %s at path %s...", levelId.data(), path.data());
-        auto levelIdStr = il2cpp_utils::createcsstr(levelId);
-        model->loadedPreviewBeatmapLevels->Add(levelIdStr, reinterpret_cast<IPreviewBeatmapLevel *>(levelPreview));
-    }
+    auto levelPreview = LoadCustomPreviewBeatmapLevelAsync(levelPathStr, levelInfoData);
+    cachedPreviewLevels[path] = levelPreview;
 
     return levelPreview;
 }
@@ -236,11 +267,10 @@ void SongManager::updateSongs() {
 
     // Prepare song loader
     getLogger().info("Reloading custom songs...");
-//    Resources::FindObjectsOfTypeAll<LevelFilteringNavigationController*>()->values[0]->UpdateCustomSongs();
 
     auto model = getLevelsModel();
     auto token = _songReloadTokenSource->get_Token();
-    auto reloadTask = model->ReloadCustomLevelPackCollectionAsync(token);
+    model->ReloadCustomLevelPackCollectionAsync(token);
 }
 
 AlwaysOwnedContentContainerSO *SongManager::getContentContainer() {
@@ -250,8 +280,15 @@ AlwaysOwnedContentContainerSO *SongManager::getContentContainer() {
     return _contentContainer;
 }
 
-//IBeatmapLevelPackCollection* SongManager::onCustomSongReloadCompletion(Task_1<IBeatmapLevelPackCollection*>* task) {
-//    auto collection = task->get_Result();
-//    getLogger().info("Custom song reload completion.");
-//    return collection;
-//}
+bool SongManager::levelIsDownloaded(const std::string& hash) {
+    return direxists(customLevelPath(hash));
+}
+
+std::string SongManager::customLevelPath(const std::string& hash) {
+    return getLevelDownloadsDirectory() + "custom_level_" + hash;
+}
+
+bool SongManager::downloadLevelByID(const std::string& beatmapId, DownloadCompletionHandler completionHandler) {
+    auto levelHash = getLevelHashFromID(beatmapId);
+    return downloadLevelByHash(levelHash, std::move(completionHandler));
+}
