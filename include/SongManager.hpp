@@ -23,10 +23,12 @@ namespace QuestMultiplayer {
     public:
         /// Song download completion handler type. std::nullopt if download fails, otherwise the path to the downloaded beatmap.
         using DownloadCompletionHandler = std::function<void(std::optional<std::string>)>;
+        static const std::string MultiplayerCacheSongPackID;
 
         SongManager();
 
         GlobalNamespace::BeatmapLevelsModel* getLevelsModel();
+        GlobalNamespace::CustomLevelLoader* getBuiltInLevelLoader();
         GlobalNamespace::AlwaysOwnedContentContainerSO* getContentContainer();
         GlobalNamespace::IPreviewBeatmapLevel* getLevelPreviewByID(Il2CppString* id);
         GlobalNamespace::IPreviewBeatmapLevel* getLevelPackByID(const std::string& id);
@@ -50,6 +52,7 @@ namespace QuestMultiplayer {
 
         GlobalNamespace::BeatmapLevelsModel* _levelsModel {};
         GlobalNamespace::AlwaysOwnedContentContainerSO* _contentContainer {};
+        GlobalNamespace::CustomLevelLoader* _crippledLoader {};
         System::Threading::CancellationTokenSource* _songReloadTokenSource {};
 
         static std::map<std::string, GlobalNamespace::CustomPreviewBeatmapLevel*> cachedPreviewLevels;
@@ -58,5 +61,7 @@ namespace QuestMultiplayer {
 
         static void performWebRequest(std::string url, InternalResponseHandler completionHandler);
         static void webRequestCompletionForwarder(UnityEngine::Networking::UnityWebRequestAsyncOperation* op);
+
+        void registerPreviewBeatmap(GlobalNamespace::CustomPreviewBeatmapLevel* previewBeatmapLevel);
     };
 }

@@ -144,7 +144,9 @@ void PlayerSessionManager::onBeatmapDownloadCompletion(GlobalNamespace::LobbyPla
 
     if (_playerSelectedLevelIDs[playerID] == selectedLevelID) {
         getLogger().info("Loading custom level\"%s\" for player selected beatmap...", selectedLevelID.data());
-        auto previewBeatmap = SongManager::loadLevelFromPath(downloadedBeatmapPath);
+//        auto previewBeatmap = SongManager::loadLevelFromPath(downloadedBeatmapPath);
+        SongManager::sharedInstance().updateSongs();
+        auto previewBeatmap = SongManager::sharedInstance().getLevelPreviewByID(beatmapId->get_levelID());
 
         if (previewBeatmap) {
             auto characteristic = model->beatmapCharacteristicCollection->GetBeatmapCharacteristicBySerializedName(beatmapId->get_beatmapCharacteristicSerializedName());

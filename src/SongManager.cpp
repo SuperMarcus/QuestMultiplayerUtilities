@@ -26,12 +26,21 @@
 #include "GlobalNamespace/CustomLevelLoader.hpp"
 #include "GlobalNamespace/FileCompressionHelper.hpp"
 #include "GlobalNamespace/LevelFilteringNavigationController.hpp"
+#include "GlobalNamespace/AlwaysOwnedContentContainerSO.hpp"
+#include "GlobalNamespace/BeatmapLevelCollection.hpp"
+#include "GlobalNamespace/IBeatmapLevelCollection.hpp"
+#include "GlobalNamespace/IBeatmapLevelPackCollection.hpp"
+#include "GlobalNamespace/BeatmapLevelPackCollection.hpp"
+#include "GlobalNamespace/CustomBeatmapLevelCollection.hpp"
+#include "GlobalNamespace/CustomBeatmapLevelPack.hpp"
 
 #include "System/Threading/CancellationTokenSource.hpp"
 #include "System/Threading/CancellationToken.hpp"
 #include "System/Threading/Tasks/Task_1.hpp"
 #include "System/Threading/Tasks/ITaskCompletionAction.hpp"
 #include "System/Collections/Generic/Dictionary_2.hpp"
+#include "System/Collections/Generic/HashSet_1.hpp"
+#include "System/Collections/Generic/List_1.hpp"
 #include "System/Action.hpp"
 #include "System/Action_1.hpp"
 #include "System/Func_1.hpp"
@@ -47,6 +56,7 @@ using namespace System;
 using namespace System::Threading;
 using namespace System::Threading::Tasks;
 
+const std::string SongManager::MultiplayerCacheSongPackID = "custom_levelpack_MultiplayerCache";
 std::map<std::string, GlobalNamespace::CustomPreviewBeatmapLevel*> SongManager::cachedPreviewLevels;
 std::unordered_set<std::string> SongManager::downloadingLevels;
 std::map<UnityWebRequestAsyncOperation*, SongManager::InternalResponseHandler> SongManager::handlerPool;
@@ -257,18 +267,19 @@ GlobalNamespace::CustomPreviewBeatmapLevel *SongManager::loadLevelFromPath(std::
     auto levelPreview = LoadCustomPreviewBeatmapLevelAsync(levelPathStr, levelInfoData);
     cachedPreviewLevels[path] = levelPreview;
 
+    // Register the song
+//    sharedInstance().registerPreviewBeatmap(levelPreview);
+
     return levelPreview;
 }
 
 void SongManager::updateSongs() {
-    if (!_songReloadTokenSource) {
-        _songReloadTokenSource = CancellationTokenSource::New_ctor();
-    }
-
     // Prepare song loader
     getLogger().info("Reloading custom songs...");
 
     auto model = getLevelsModel();
+
+    _songReloadTokenSource = CancellationTokenSource::New_ctor();
     auto token = _songReloadTokenSource->get_Token();
     model->ReloadCustomLevelPackCollectionAsync(token);
 }
@@ -277,6 +288,7 @@ AlwaysOwnedContentContainerSO *SongManager::getContentContainer() {
     if (!_contentContainer) {
         _contentContainer = Resources::FindObjectsOfTypeAll<AlwaysOwnedContentContainerSO*>()->values[0];
     }
+
     return _contentContainer;
 }
 
@@ -291,4 +303,92 @@ std::string SongManager::customLevelPath(const std::string& hash) {
 bool SongManager::downloadLevelByID(const std::string& beatmapId, DownloadCompletionHandler completionHandler) {
     auto levelHash = getLevelHashFromID(beatmapId);
     return downloadLevelByHash(levelHash, std::move(completionHandler));
+}
+
+void SongManager::registerPreviewBeatmap(CustomPreviewBeatmapLevel* previewLevel) {
+    auto levelID = previewLevel->get_levelID();
+    auto levelIDStr = to_string(levelID);
+
+    auto model = getLevelsModel();
+
+    // Should have been added by SongLoader
+//    auto ownedContainer = getContentContainer();
+//    ownedContainer->get_alwaysOwnedBeatmapLevelIds()->Add(levelID);
+
+    if (!model->customLevelPackCollection) {
+        getLogger().info("Cannot register preview level: customLevelPackCollection does not exists.");
+        return;
+    }
+
+    auto customPackArray = model->customLevelPackCollection->get_beatmapLevelPacks();
+    auto customPackArrayLen = customPackArray->Length();
+    CustomBeatmapLevelPack* multiplayerCacheLevelPack = nullptr;
+
+    for (int i = 0; i < customPackArrayLen; ++i) {
+        auto customPack = customPackArray->values[i];
+        auto customPackID = to_string(customPack->get_packID());
+        if (customPackID == SongManager::MultiplayerCacheSongPackID) {
+            getLogger().info("Found existing pack!");
+            multiplayerCacheLevelPack = reinterpret_cast<CustomBeatmapLevelPack*>(customPack);
+            break;
+        }
+    }
+
+    if (multiplayerCacheLevelPack) {
+        getLogger().info("Adding preview to existing cache level pack...");
+
+        auto originalLength = multiplayerCacheLevelPack->customBeatmapLevelCollection->customPreviewBeatmapLevels->Length();
+        auto resizedLevelsArray = reinterpret_cast<::Array<CustomPreviewBeatmapLevel*>*>(il2cpp_functions::array_new(classof(CustomPreviewBeatmapLevel*), originalLength + 1));
+
+        for (int i = 0; i < originalLength; ++i) {
+            resizedLevelsArray->values[i] = multiplayerCacheLevelPack->customBeatmapLevelCollection->customPreviewBeatmapLevels->values[i];
+        }
+
+        resizedLevelsArray->values[originalLength] = previewLevel;
+        multiplayerCacheLevelPack->customBeatmapLevelCollection->customPreviewBeatmapLevels = resizedLevelsArray;
+    } else {
+        getLogger().info("Creating Multiplayer cache level pack...");
+
+        auto customPackCollectionClass = il2cpp_functions::object_get_class(reinterpret_cast<Il2CppObject *>(model->customLevelPackCollection));
+        if (!il2cpp_functions::class_is_assignable_from(classof(BeatmapLevelPackCollection*), customPackCollectionClass)) {
+            getLogger().error("Cannot register preview beatmap: customLevelPackCollection is not compatible with class BeatmapLevelPackCollection.");
+            return;
+        }
+
+        auto levelPackCollectionContent = reinterpret_cast<::Array<IBeatmapLevelPack*>*>(il2cpp_functions::array_new(classof(IBeatmapLevelPack*), 1));
+        auto levelPackContent = reinterpret_cast<::Array<CustomPreviewBeatmapLevel*>*>(il2cpp_functions::array_new(classof(CustomPreviewBeatmapLevel*), 1));
+        auto levelPackCollection = CustomBeatmapLevelCollection::New_ctor(levelPackContent);
+
+        multiplayerCacheLevelPack = CustomBeatmapLevelPack::New_ctor(
+            il2cpp_utils::createcsstr(SongManager::MultiplayerCacheSongPackID),
+            il2cpp_utils::createcsstr("Multiplayer Downloads"),
+            il2cpp_utils::createcsstr("Multiplayer Downloads"),
+            getBuiltInLevelLoader()->defaultPackCover,
+            levelPackCollection
+        );
+        levelPackCollectionContent->values[0] = reinterpret_cast<IBeatmapLevelPack *>(multiplayerCacheLevelPack);
+        levelPackContent->values[0] = previewLevel;
+
+        auto customLevelPackCollection = reinterpret_cast<BeatmapLevelPackCollection*>(model->customLevelPackCollection);
+        auto originalNumberOfPacks = customLevelPackCollection->beatmapLevelPacks->Length();
+        auto numberOfCustomPacks = customLevelPackCollection->beatmapLevelPacks->Length() + 1;
+        auto resizedLevelPackArray = reinterpret_cast<::Array<IBeatmapLevelPack*>*>(il2cpp_functions::array_new(classof(IBeatmapLevelPack*), numberOfCustomPacks));
+
+        for (int i = 0; i < originalNumberOfPacks; ++i) {
+            resizedLevelPackArray->values[i] = customLevelPackCollection->beatmapLevelPacks->values[i];
+        }
+
+        resizedLevelPackArray->values[originalNumberOfPacks] = reinterpret_cast<IBeatmapLevelPack *>(multiplayerCacheLevelPack);
+    }
+
+    getLogger().info("Updating previews...");
+    model->UpdateLoadedPreviewLevels();
+}
+
+GlobalNamespace::CustomLevelLoader *SongManager::getBuiltInLevelLoader() {
+    if (!_crippledLoader) {
+        _crippledLoader = Resources::FindObjectsOfTypeAll<CustomLevelLoader*>()->values[0];
+    }
+
+    return _crippledLoader;
 }
