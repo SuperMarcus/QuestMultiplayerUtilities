@@ -87,9 +87,10 @@ MAKE_HOOK_OFFSETLESS(LobbyPlayersDataModel_HandleMenuRpcManagerSelectedBeatmap, 
 }
 
 void InstallHooks() {
-    getLogger().info("Installing hooks...");
-    INSTALL_HOOK_OFFSETLESS(MultiplayerLevelLoader_LoadLevel, il2cpp_utils::FindMethodUnsafe("", "MultiplayerLevelLoader", "LoadLevel", 3));
-    INSTALL_HOOK_OFFSETLESS(MultiplayerModeSelectionFlowCoordinator_DidActivate, il2cpp_utils::FindMethodUnsafe("", "MultiplayerModeSelectionFlowCoordinator", "DidActivate", 3));
-    INSTALL_HOOK_OFFSETLESS(LobbyPlayersDataModel_Activate, il2cpp_utils::FindMethod("", "LobbyPlayersDataModel", "Activate"));
-    INSTALL_HOOK_OFFSETLESS(LobbyPlayersDataModel_HandleMenuRpcManagerSelectedBeatmap, il2cpp_utils::FindMethodUnsafe("", "LobbyPlayersDataModel", "HandleMenuRpcManagerSelectedBeatmap", 2));
+    auto& logger = getLogger();
+    logger.info("Installing hooks...");
+    INSTALL_HOOK_OFFSETLESS(logger, MultiplayerLevelLoader_LoadLevel, il2cpp_utils::FindMethodUnsafe("", "MultiplayerLevelLoader", "LoadLevel", 3));
+    INSTALL_HOOK_OFFSETLESS(logger, MultiplayerModeSelectionFlowCoordinator_DidActivate, il2cpp_utils::FindMethodUnsafe("", "MultiplayerModeSelectionFlowCoordinator", "DidActivate", 3));
+    INSTALL_HOOK_OFFSETLESS(logger, LobbyPlayersDataModel_Activate, il2cpp_utils::FindMethod("", "LobbyPlayersDataModel", "Activate"));
+    INSTALL_HOOK_OFFSETLESS(logger, LobbyPlayersDataModel_HandleMenuRpcManagerSelectedBeatmap, il2cpp_utils::FindMethodUnsafe("", "LobbyPlayersDataModel", "HandleMenuRpcManagerSelectedBeatmap", 2));
 }

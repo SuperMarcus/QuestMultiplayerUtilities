@@ -17,5 +17,5 @@ inline std::string operator +(const std::string& a, Il2CppString *b) {
     return a + to_string(b);
 }
 
-const Logger& getLogger();
+Logger& getLogger();
 const ModInfo& getModInfo();

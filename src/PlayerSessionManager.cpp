@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "utils/typedefs.h"
+#include "utils/il2cpp-utils.hpp"
 #include "private.hpp"
 #include "PlayerSessionManager.hpp"
 #include "SongManager.hpp"
@@ -21,7 +22,6 @@
 using namespace QuestMultiplayer;
 using namespace GlobalNamespace;
 using namespace UnityEngine;
-using namespace il2cpp_utils;
 using namespace System;
 
 PlayerSessionManager &QuestMultiplayer::PlayerSessionManager::sharedInstance() {
@@ -43,38 +43,38 @@ GlobalNamespace::IMultiplayerSessionManager *PlayerSessionManager::getSessionMan
 
 void PlayerSessionManager::updatePlayerStates() {
     auto sessionManager = getSessionManager();
-    sessionManager->SetLocalPlayerState(createcsstr("modded"), true);
-    sessionManager->SetLocalPlayerState(createcsstr("customsongs"), true); // Can't disable custom songs
-    sessionManager->SetLocalPlayerState(createcsstr("enforcemods"), isEnforcingMods);
+    sessionManager->SetLocalPlayerState(il2cpp_utils::createcsstr("modded"), true);
+    sessionManager->SetLocalPlayerState(il2cpp_utils::createcsstr("customsongs"), true); // Can't disable custom songs
+    sessionManager->SetLocalPlayerState(il2cpp_utils::createcsstr("enforcemods"), isEnforcingMods);
 
     if (!didRegisterEvents) {
         getLogger().info("Registering multiplayer session events...");
-        sessionManager->add_connectedEvent(MakeDelegate<Action*>(
+        sessionManager->add_connectedEvent(il2cpp_utils::MakeDelegate<Action*>(
             classof(Action*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onConnectedEvent
         ));
-        sessionManager->add_connectionFailedEvent(MakeDelegate<Action_1<ConnectionFailedReason>*>(
+        sessionManager->add_connectionFailedEvent(il2cpp_utils::MakeDelegate<Action_1<ConnectionFailedReason>*>(
             classof(Action_1<ConnectionFailedReason>*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onConnectionFailedEvent
         ));
-        sessionManager->add_playerConnectedEvent(MakeDelegate<Action_1<IConnectedPlayer*>*>(
+        sessionManager->add_playerConnectedEvent(il2cpp_utils::MakeDelegate<Action_1<IConnectedPlayer*>*>(
             classof(Action_1<IConnectedPlayer*>*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onPlayerConnectedEvent
         ));
-        sessionManager->add_playerDisconnectedEvent(MakeDelegate<Action_1<IConnectedPlayer*>*>(
+        sessionManager->add_playerDisconnectedEvent(il2cpp_utils::MakeDelegate<Action_1<IConnectedPlayer*>*>(
             classof(Action_1<IConnectedPlayer*>*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onPlayerDisconnectedEvent
         ));
-        sessionManager->add_playerStateChangedEvent(MakeDelegate<Action_1<IConnectedPlayer*>*>(
+        sessionManager->add_playerStateChangedEvent(il2cpp_utils::MakeDelegate<Action_1<IConnectedPlayer*>*>(
             classof(Action_1<IConnectedPlayer*>*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onPlayerStateChangedEvent
         ));
-        sessionManager->add_disconnectedEvent(MakeDelegate<Action_1<DisconnectedReason>*>(
+        sessionManager->add_disconnectedEvent(il2cpp_utils::MakeDelegate<Action_1<DisconnectedReason>*>(
             classof(Action_1<DisconnectedReason>*),
             (Il2CppObject*) nullptr,
             PlayerSessionManager::onDisconnectedEvent

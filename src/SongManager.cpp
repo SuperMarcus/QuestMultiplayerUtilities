@@ -4,6 +4,7 @@
 
 #include "utils/typedefs.h"
 #include "utils/il2cpp-functions.hpp"
+#include "utils/il2cpp-utils.hpp"
 #include "SongManager.hpp"
 #include "private.hpp"
 #include "config/config-utils.hpp"
@@ -15,6 +16,7 @@
 #include "UnityEngine/Networking/UnityWebRequest.hpp"
 #include "UnityEngine/Networking/DownloadHandler.hpp"
 #include "UnityEngine/Resources.hpp"
+#include "UnityEngine/Sprite.hpp"
 
 #include "GlobalNamespace/PlayerDataModel.hpp"
 #include "GlobalNamespace/IBeatmapLevelPackCollection.hpp"
